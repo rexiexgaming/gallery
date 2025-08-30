@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>معرض البوسترات | لوحة تحكم</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0b0f19;--card:#111628;--muted:#94a3b8}
+    body{font-family:"Cairo", system-ui, -apple-system, Segoe UI, Roboto}
+    .glass{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));backdrop-filter:saturate(140%) blur(8px)}
+    .grid-auto{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+  </style>
+</head>
+<body class="bg-[var(--bg)] text-white min-h-screen">
+  <!-- NAV -->
+  <header class="sticky top-0 z-40 glass border-b border-white/10">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
+      <h1 class="text-lg font-semibold">📌 معرض البوسترات</h1>
+      <nav class="ms-auto flex items-center gap-2">
+        <button id="navGallery" class="px-3 py-2 rounded-xl hover:bg-white/10 data-[active=true]:bg-white/15" data-active="true">المعرض</button>
+        <button id="navAdmin" class="px-3 py-2 rounded-xl hover:bg-white/10">لوحة التحكم</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <!-- GALLERY -->
+    <section id="gallerySection" class="space-y-6">
+      <div class="flex items-center justify-between">
+        <h2 class="text-2xl font-bold">📌 أحدث البوسترات</h2>
+        <input id="searchInput" type="search" placeholder="ابحث بالعنوان…" class="w-64 rounded-2xl bg-white/5 border border-white/10 px-4 py-2" />
+      </div>
+      <div id="galleryGrid" class="grid grid-auto gap-4"></div>
+      <p id="emptyState" class="hidden text-center text-[var(--muted)]">لا توجد بوسترات بعد.</p>
+    </section>
+
+    <!-- ADMIN -->
+    <section id="adminSection" class="hidden space-y-6">
+      <div class="glass rounded-2xl border border-white/10 p-6 space-y-4">
+        <h3 class="text-lg font-semibold">➕ إضافة بوستر جديد</h3>
+        <form id="uploadForm" class="grid md:grid-cols-4 gap-3">
+          <input id="titleInput" type="text" placeholder="عنوان البوستر" class="md:col-span-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2" required>
+          <input id="fileInput" type="file" accept="image/*" class="rounded-xl bg-white/5 border border-white/10 px-4 py-2" required>
+          <button class="rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-semibold">رفع</button>
+        </form>
+        <p class="text-sm text-[var(--muted)]">الصور تُرفع مباشرة إلى Cloudinary.</p>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="text-lg font-semibold">🗂️ إدارة البوسترات</h3>
+        <div id="adminList" class="grid grid-auto gap-4"></div>
+        <p id="adminEmpty" class="hidden text-center text-[var(--muted)]">لا توجد عناصر.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Templates -->
+  <template id="posterCardTmpl">
+    <article class="rounded-2xl overflow-hidden border border-white/10 bg-[var(--card)]">
+      <img class="w-full h-56 object-cover" alt="poster"/>
+      <div class="p-3 flex items-center gap-2">
+        <h4 class="font-semibold line-clamp-1"></h4>
+        <a class="ms-auto text-sm underline hover:no-underline" target="_blank">فتح</a>
+      </div>
+    </article>
+  </template>
+
+  <template id="posterAdminCardTmpl">
+    <article class="rounded-2xl overflow-hidden border border-white/10 bg-[var(--card)]">
+      <img class="w-full h-40 object-cover" alt="poster"/>
+      <div class="p-3 flex items-center gap-2">
+        <h4 class="font-semibold line-clamp-1"></h4>
+        <button data-action="delete" class="ms-auto rounded-xl bg-red-600 px-3 py-1.5 text-sm">حذف</button>
+      </div>
+    </article>
+  </template>
+
+  <script>
+    // Cloudinary config
+    const CLOUD_NAME = "dgj7oy6h4";
+    const UPLOAD_PRESET = "BM PHOTOSHOP";
+
+    let posters = []; // مكان لتخزين البيانات محليًا
+
+    const navGallery = document.getElementById('navGallery');
+    const navAdmin = document.getElementById('navAdmin');
+    const gallerySection = document.getElementById('gallerySection');
+    const adminSection = document.getElementById('adminSection');
+    const uploadForm = document.getElementById('uploadForm');
+    const titleInput = document.getElementById('titleInput');
+    const fileInput = document.getElementById('fileInput');
+    const galleryGrid = document.getElementById('galleryGrid');
+    const emptyState = document.getElementById('emptyState');
+    const adminList = document.getElementById('adminList');
+    const adminEmpty = document.getElementById('adminEmpty');
+    const searchInput = document.getElementById('searchInput');
+
+    // Toggle views
+    navGallery.addEventListener('click', () => {
+      gallerySection.classList.remove('hidden');
+      adminSection.classList.add('hidden');
+    });
+    navAdmin.addEventListener('click', () => {
+      gallerySection.classList.add('hidden');
+      adminSection.classList.remove('hidden');
+    });
+
+    // Render function
+    function renderAll(filter = '') {
+      const filtered = filter
+        ? posters.filter(p => p.title.toLowerCase().includes(filter.toLowerCase()))
+        : posters;
+
+      galleryGrid.innerHTML = '';
+      if (filtered.length === 0) {
+        emptyState.classList.remove('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+        for (const p of filtered) {
+          const node = document.getElementById('posterCardTmpl').content.cloneNode(true);
+          node.querySelector('img').src = p.url;
+          node.querySelector('h4').textContent = p.title;
+          node.querySelector('a').href = p.url;
+          galleryGrid.appendChild(node);
+        }
+      }
+
+      adminList.innerHTML = '';
+      if (posters.length === 0) {
+        adminEmpty.classList.remove('hidden');
+      } else {
+        adminEmpty.classList.add('hidden');
+        posters.forEach((p, i) => {
+          const node = document.getElementById('posterAdminCardTmpl').content.cloneNode(true);
+          node.querySelector('img').src = p.url;
+          node.querySelector('h4').textContent = p.title;
+          node.querySelector('[data-action="delete"]').onclick = () => {
+            posters.splice(i, 1);
+            renderAll(searchInput.value.trim());
+          };
+          adminList.appendChild(node);
+        });
+      }
+    }
+
+    // Search
+    searchInput.addEventListener('input', e => renderAll(e.target.value.trim()));
+
+    // Upload to Cloudinary
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const file = fileInput.files[0];
+      const title = titleInput.value.trim();
+      if (!file || !title) return alert("أدخل العنوان واختر صورة");
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", UPLOAD_PRESET);
+
+      try {
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+        posters.unshift({ title, url: data.secure_url });
+        titleInput.value = "";
+        fileInput.value = "";
+        renderAll(searchInput.value.trim());
+        alert("✅ تم رفع البوستر!");
+      } catch (err) {
+        alert("خطأ أثناء الرفع: " + err.message);
+      }
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>
